@@ -592,6 +592,17 @@ void CWeaponGrapple::ItemPostFrame( void )
 	//Enforces being able to use PrimaryAttack and Secondary Attack
 	CBasePlayer *pOwner = ToBasePlayer( GetOwner() );
  
+	if ( ( pOwner->m_nButtons & IN_USE ) )
+	{
+		if ( m_flNextPrimaryAttack < gpGlobals->curtime )
+		{
+			PrimaryAttack();
+		}
+	}
+	else if ( m_bMustReload ) //&& HasWeaponIdleTimeElapsed() )
+	{
+		Reload();
+	}
 	if ( ( pOwner->m_nButtons & IN_ATTACK ) )
 	{
 		if ( m_flNextPrimaryAttack < gpGlobals->curtime )
