@@ -215,7 +215,7 @@ void CGrappleHook::HookTouch( CBaseEntity *pOther )
 			// Set Jay's gai flag
 			m_hPlayer->SetPhysicsFlag( PFLAG_VPHYSICS_MOTIONCONTROLLER, true );
  
-			//IPhysicsObject *pPhysObject = m_hPlayer->VPhysicsGetObject();
+			IPhysicsObject *pPhysObject = m_hPlayer->VPhysicsGetObject();
 			IPhysicsObject *pRootPhysObject = VPhysicsGetObject();
 			Assert( pRootPhysObject );
 			Assert( pPhysObject );
@@ -409,6 +409,116 @@ void CWeaponGrapple::Precache( void )
  
 	BaseClass::Precache();
 }
+
+//-----------------------------------------------------------------------------
+// Purpose: Press E to shoot out the grapple
+//-----------------------------------------------------------------------------
+void CweaponGrapple::UseEquipment( void )
+{
+	// Can't have an active hook out
+	if ( m_hHook != NULL )
+		return;
+	
+	#ifndef CLIENT_DLL
+	CBasePlayer *pPlayer = ToBasePlayer( GetOwner() );
+
+	if ( !pPlayer )
+	{
+		return;
+	}
+
+	if ( m_iClip1 <= 0 )
+	{
+		if ( !m_bFireOnEmpty )
+		{
+			Reload();
+		}
+		else
+		{
+			WeaponSound( EMPTY );
+			m_flNextPrimaryAttack = 0.15;
+		}
+
+		return;
+	}
+
+	m_iPrimaryAttacks++;
+	gamestats->Event_WeaponFired( pPlayer, true, GetClassname() );
+
+	WeaponSound( SINGLE );
+	pPlayer->DoMuzzleFlash();
+
+	pPlayer->SetAnimation( PLAYER_ATTACK1 );
+
+	m_flNextPrimaryAttack = gpGlobals->curtime + 0.75;
+	m_flNextSecondaryAttack = gpGlobals->curtime + 0.75;
+
+	//Disabled so we can shoot all the time that we want
+	//m_iClip1--;
+
+	Vector vecSrc		= pPlayer->Weapon_ShootPosition();
+	Vector vecAiming	= pPlayer->GetAutoaimVector( AUTOAIM_SCALE_DEFAULT );	
+
+	//We will not shoot bullets anymore
+	//pPlayer->FireBullets( 1, vecSrc, vecAiming, vec3_origin, MAX_TRACE_LENGTH, m_iPrimaryAmmoType, 0 );
+
+	pPlayer->SetMuzzleFlashTime( gpGlobals->curtime + 0.5 );
+
+	CSoundEnt::InsertSound( SOUND_COMBAT, GetAbsOrigin(), 600, 0.2, GetOwner() );
+
+	if ( !m_iClip1 && pPlayer->GetAmmoCount( m_iPrimaryAmmoType ) <= 0 )
+	{
+		// HEV suit - indicate out of ammo condition
+		pPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 ); 
+	}
+
+	trace_t tr;
+	Vector vecShootOrigin, vecShootDir, vecDir, vecEnd;
+
+	//Gets the direction where the player is aiming
+	AngleVectors (pPlayer->EyeAngles(), &vecDir);
+
+	//Gets the position of the player
+	vecShootOrigin = pPlayer->Weapon_ShootPosition();
+
+	//Gets the position where the hook will hit
+	vecEnd	= vecShootOrigin + (vecDir * MAX_TRACE_LENGTH);	
+	
+	//Traces a line between the two vectors
+	UTIL_TraceLine( vecShootOrigin, vecEnd, MASK_SHOT, pPlayer, COLLISION_GROUP_NONE, &tr);
+
+	//Draws the beam
+	DrawBeam( vecShootOrigin, tr.endpos, 15.5 );
+
+	//Creates an energy impact effect if we don't hit the sky or other places
+	if ( (tr.surface.flags & SURF_SKY) == false )
+	{
+		CPVSFilter filter( tr.endpos );
+		te->GaussExplosion( filter, 0.0f, tr.endpos, tr.plane.normal, 0 );
+		m_nBulletType = GetAmmoDef()->Index("GaussEnergy");
+		UTIL_ImpactTrace( &tr, m_nBulletType );
+
+		//Makes a sprite at the end of the beam
+		m_pLightGlow = CSprite::SpriteCreate( "sprites/physcannon_bluecore2b.vmt", GetAbsOrigin(), TRUE);
+
+		//Sets FX render and color
+		m_pLightGlow->SetTransparency( 9, 255, 255, 255, 200, kRenderFxNoDissipation );
+		
+		//Sets the position
+		m_pLightGlow->SetAbsOrigin(tr.endpos);
+		
+		//Bright
+		m_pLightGlow->SetBrightness( 255 );
+		
+		//Scale
+		m_pLightGlow->SetScale( 0.65 );
+	}
+	#endif
+	
+	FireHook();
+ 
+	SetWeaponIdleTime( gpGlobals->curtime + SequenceDuration( ACT_VM_PRIMARYATTACK ) );
+}
  
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -590,7 +700,7 @@ void CWeaponGrapple::ItemBusyFrame( void )
 //-----------------------------------------------------------------------------
 void CWeaponGrapple::ItemPostFrame( void )
 {
-	//Enforces being able to use PrimaryAttack and Secondary Attack
+	//Enforces being able to use UseEquipment PrimaryAttack and Secondary Attack
 	CBasePlayer *pOwner = ToBasePlayer( GetOwner() );
 
 	if ( ( pOwner->m_nButtons & IN_USE ) )
@@ -637,7 +747,7 @@ void CWeaponGrapple::ItemPostFrame( void )
 #ifndef CLIENT_DLL
 	if ( m_hHook )
 	{
-		if ( !(pOwner->m_nButtons & IN_ATTACK) && !(pOwner->m_nButtons & IN_ATTACK2))
+		if ( !(pOwner->m_nButtons & IN_USE) && !(pOwner->m_nButtons & IN_ATTACK) && !(pOwner->m_nButtons & IN_ATTACK2))
 		{
 			m_hHook->SetTouch( NULL );
 			m_hHook->SetThink( NULL );

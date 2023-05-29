@@ -89,6 +89,7 @@ public:
 	CWeaponGrapple( void );
  
 	virtual void	Precache( void );
+	virtual void    UseEquipment( void );
 	virtual void	PrimaryAttack( void );
 	virtual void	SecondaryAttack( void );
 	virtual bool	Deploy( void );
