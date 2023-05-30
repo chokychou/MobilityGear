@@ -123,6 +123,9 @@ public:
 private:
 
     void    FireHook( void );
+ 	void 	Swing( bool bSecondary );
+	void	Hit( trace_t &traceHit, Activity nHitActivity );
+	Activity ChooseIntersectionPointAndActivity( trace_t &hitTrace, const Vector &mins, const Vector &maxs, CBasePlayer *pOwner );
  
 #ifndef CLIENT_DLL
  

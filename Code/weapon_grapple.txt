@@ -4,11 +4,11 @@ WeaponData
 {
 	// Weapon data is loaded by both the Game and Client DLLs.
 	"printname"	"GRAPPLE HOOK"
-	"viewmodel"			"models/weapons/v_physcannon.mdl"
+	"viewmodel"			"models/weapons/v_crowbar.mdl"
 	"playermodel"		"models/weapons/w_Physics.mdl"
-	"anim_prefix"		"gauss"
-	"bucket"			"5"
-	"bucket_position"	"2"
+	"anim_prefix"		"crowbar"
+	"bucket"			"0"
+	"bucket_position"	"0"
 	"bucket_360"			"0"
 	"bucket_position_360"	"0"
 
@@ -29,14 +29,9 @@ WeaponData
 	SoundData
 	{
 
-		"reload"		"Weapon_Pistol.Reload"
-		"reload_npc"	"Weapon_Pistol.NPC_Reload"
-		"empty"			"Weapon_MegaPhysCannon.DryFire"
-		"single_shot"		"Weapon_Mortar.Single"
-		"single_shot_npc"	"Weapon_Mortar.Single"
-		"special1"		"Weapon_PhysCannon.HoldSound"
-		"special2"		"Weapon_Pistol.Special2"
-		"burst"			"Weapon_Pistol.Burst"
+		"single_shot"		"Weapon_Crowbar.Single"
+		"melee_hit"			"Weapon_Crowbar.Melee_Hit"
+		"melee_hit_world"	"Weapon_Crowbar.Melee_HitWorld"
 	}
 
 	// Weapon Sprite data is loaded by the Client DLL.
@@ -45,12 +40,12 @@ WeaponData
 		"weapon"
 		{
 				"font"		"WeaponIcons"
-				"character"	"m"
+				"character"	"c"
 		}
 		"weapon_s"
 		{	
 				"font"		"WeaponIconsSelected"
-				"character"	"m"
+				"character"	"c"
 		}
 		"crosshair"
 		{
@@ -60,8 +55,8 @@ WeaponData
 		"autoaim"
 		{
 			"file"		"sprites/crosshairs"
-			"x"			"48"
-			"y"			"72"
+			"x"			"0"
+			"y"			"48"
 			"width"		"24"
 			"height"	"24"
 		}

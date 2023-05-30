@@ -12,7 +12,9 @@
 #include "npcevent.h"
 #include "in_buttons.h"
 #include "c_weapon_grapple.h"
- 
+#include "takedamageinfo.h"
+#include "util_shared.h"
+
 #ifdef CLIENT_DLL
 //  #include "c_hl2mp_player.h"         
 //  #include "player.h"                 
@@ -48,6 +50,11 @@
 #define BOLT_AIR_VELOCITY	3500
 #define BOLT_WATER_VELOCITY	1500
  
+#define MELEE_HULL_DIM		16
+
+static const Vector g_meleeMins(-MELEE_HULL_DIM,-MELEE_HULL_DIM,-MELEE_HULL_DIM);
+static const Vector g_meleeMaxs(MELEE_HULL_DIM,MELEE_HULL_DIM,MELEE_HULL_DIM);
+
 #ifndef CLIENT_DLL
  
 LINK_ENTITY_TO_CLASS( grapple_hook, CGrappleHook );
@@ -412,7 +419,7 @@ void CWeaponGrapple::Precache( void )
 //-----------------------------------------------------------------------------
 // Purpose: Press E to shoot out the grapple
 //-----------------------------------------------------------------------------
-void CweaponGrapple::UseEquipment( void )
+void CWeaponGrapple::UseEquipment( void )
 {
 	// Can't have an active hook out
 	if ( m_hHook != NULL )
@@ -441,13 +448,10 @@ void CweaponGrapple::UseEquipment( void )
 		return;
 	}
 
-	m_iPrimaryAttacks++;
 	gamestats->Event_WeaponFired( pPlayer, true, GetClassname() );
 
 	WeaponSound( SINGLE );
 	pPlayer->DoMuzzleFlash();
-
-	pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
 	m_flNextPrimaryAttack = gpGlobals->curtime + 0.75;
 	m_flNextSecondaryAttack = gpGlobals->curtime + 0.75;
@@ -518,19 +522,13 @@ void CweaponGrapple::UseEquipment( void )
  
 	SetWeaponIdleTime( gpGlobals->curtime + SequenceDuration( ACT_VM_PRIMARYATTACK ) );
 }
- 
+
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
 void CWeaponGrapple::PrimaryAttack( void )
 {
-	// Can't have an active hook out
-	if ( m_hHook != NULL )
-		return;
- 
-	#ifndef CLIENT_DLL
 	CBasePlayer *pPlayer = ToBasePlayer( GetOwner() );
-
 	if ( !pPlayer )
 	{
 		return;
@@ -552,82 +550,12 @@ void CWeaponGrapple::PrimaryAttack( void )
 	}
 
 	m_iPrimaryAttacks++;
-	gamestats->Event_WeaponFired( pPlayer, true, GetClassname() );
+	// gamestats->Event_WeaponFired( pPlayer, true, GetClassname() );
 
 	WeaponSound( SINGLE );
 	pPlayer->DoMuzzleFlash();
 
-	SendWeaponAnim( ACT_VM_PRIMARYATTACK );
-	pPlayer->SetAnimation( PLAYER_ATTACK1 );
-
-	m_flNextPrimaryAttack = gpGlobals->curtime + 0.75;
-	m_flNextSecondaryAttack = gpGlobals->curtime + 0.75;
-
-	//Disabled so we can shoot all the time that we want
-	//m_iClip1--;
-
-	Vector vecSrc		= pPlayer->Weapon_ShootPosition();
-	Vector vecAiming	= pPlayer->GetAutoaimVector( AUTOAIM_SCALE_DEFAULT );	
-
-	//We will not shoot bullets anymore
-	//pPlayer->FireBullets( 1, vecSrc, vecAiming, vec3_origin, MAX_TRACE_LENGTH, m_iPrimaryAmmoType, 0 );
-
-	pPlayer->SetMuzzleFlashTime( gpGlobals->curtime + 0.5 );
-
-	CSoundEnt::InsertSound( SOUND_COMBAT, GetAbsOrigin(), 600, 0.2, GetOwner() );
-
-	if ( !m_iClip1 && pPlayer->GetAmmoCount( m_iPrimaryAmmoType ) <= 0 )
-	{
-		// HEV suit - indicate out of ammo condition
-		pPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 ); 
-	}
-
-	trace_t tr;
-	Vector vecShootOrigin, vecShootDir, vecDir, vecEnd;
-
-	//Gets the direction where the player is aiming
-	AngleVectors (pPlayer->EyeAngles(), &vecDir);
-
-	//Gets the position of the player
-	vecShootOrigin = pPlayer->Weapon_ShootPosition();
-
-	//Gets the position where the hook will hit
-	vecEnd	= vecShootOrigin + (vecDir * MAX_TRACE_LENGTH);	
-	
-	//Traces a line between the two vectors
-	UTIL_TraceLine( vecShootOrigin, vecEnd, MASK_SHOT, pPlayer, COLLISION_GROUP_NONE, &tr);
-
-	//Draws the beam
-	DrawBeam( vecShootOrigin, tr.endpos, 15.5 );
-
-	//Creates an energy impact effect if we don't hit the sky or other places
-	if ( (tr.surface.flags & SURF_SKY) == false )
-	{
-		CPVSFilter filter( tr.endpos );
-		te->GaussExplosion( filter, 0.0f, tr.endpos, tr.plane.normal, 0 );
-		m_nBulletType = GetAmmoDef()->Index("GaussEnergy");
-		UTIL_ImpactTrace( &tr, m_nBulletType );
-
-		//Makes a sprite at the end of the beam
-		m_pLightGlow = CSprite::SpriteCreate( "sprites/physcannon_bluecore2b.vmt", GetAbsOrigin(), TRUE);
-
-		//Sets FX render and color
-		m_pLightGlow->SetTransparency( 9, 255, 255, 255, 200, kRenderFxNoDissipation );
-		
-		//Sets the position
-		m_pLightGlow->SetAbsOrigin(tr.endpos);
-		
-		//Bright
-		m_pLightGlow->SetBrightness( 255 );
-		
-		//Scale
-		m_pLightGlow->SetScale( 0.65 );
-	}
-	#endif
-
-	FireHook();
- 
-	SetWeaponIdleTime( gpGlobals->curtime + SequenceDuration( ACT_VM_PRIMARYATTACK ) );
+	Swing(true);
 }
  
 //-----------------------------------------------------------------------------
@@ -635,8 +563,34 @@ void CWeaponGrapple::PrimaryAttack( void )
 //-----------------------------------------------------------------------------
 void CWeaponGrapple::SecondaryAttack( void )
 {
-	ToggleHook();
-	WeaponSound( EMPTY );
+	CBasePlayer *pPlayer = ToBasePlayer( GetOwner() );
+	if ( !pPlayer )
+	{
+		return;
+	}
+
+	if ( m_iClip1 <= 0 )
+	{
+		if ( !m_bFireOnEmpty )
+		{
+			Reload();
+		}
+		else
+		{
+			WeaponSound( EMPTY );
+			m_flNextPrimaryAttack = 0.15;
+		}
+
+		return;
+	}
+
+	m_iPrimaryAttacks++;
+	// gamestats->Event_WeaponFired( pPlayer, true, GetClassname() );
+
+	WeaponSound( SINGLE );
+	pPlayer->DoMuzzleFlash();
+
+	Swing(false);
 }
  
 //-----------------------------------------------------------------------------
@@ -663,27 +617,27 @@ bool CWeaponGrapple::Reload( void )
 //-----------------------------------------------------------------------------
 // Purpose: Toggles between pull and rappel mode
 //-----------------------------------------------------------------------------
-bool CWeaponGrapple::ToggleHook( void )
-{
-	#ifndef CLIENT_DLL
+// bool CWeaponGrapple::ToggleHook( void )
+// {
+// 	#ifndef CLIENT_DLL
  
-	CBasePlayer *pPlayer = ToBasePlayer( GetOwner() );
+// 	CBasePlayer *pPlayer = ToBasePlayer( GetOwner() );
 
-	if ( m_bHook )
-	{
-		//m_bHook = false;
-		ClientPrint(pPlayer,HUD_PRINTCENTER, "Pull mode");
-		//return m_bHook;
-	}
-	else
-	{
-		//m_bHook = true;
-		ClientPrint(pPlayer,HUD_PRINTCENTER, "Rappel mode");
-		//return m_bHook;
-	}
-	#endif
-	return !m_bHook;
-}
+// 	if ( m_bHook )
+// 	{
+// 		//m_bHook = false;
+// 		ClientPrint(pPlayer,HUD_PRINTCENTER, "Pull mode");
+// 		//return m_bHook;
+// 	}
+// 	else
+// 	{
+// 		//m_bHook = true;
+// 		ClientPrint(pPlayer,HUD_PRINTCENTER, "Rappel mode");
+// 		//return m_bHook;
+// 	}
+// 	#endif
+// 	return !m_bHook;
+// }
  
 //-----------------------------------------------------------------------------
 // Purpose: 
@@ -706,7 +660,7 @@ void CWeaponGrapple::ItemPostFrame( void )
 	{
 		if ( m_flNextPrimaryAttack < gpGlobals->curtime )
 		{
-			PrimaryAttack();
+			UseEquipment();
 		}
 	}
 	else if ( m_bMustReload ) //&& HasWeaponIdleTimeElapsed() )
@@ -729,7 +683,7 @@ void CWeaponGrapple::ItemPostFrame( void )
 	{
 		if ( m_flNextPrimaryAttack < gpGlobals->curtime )
 		{
-			SecondaryAttack();
+		 SecondaryAttack();
 		}
 	}
 	else if ( m_bMustReload ) //&& HasWeaponIdleTimeElapsed() )
@@ -746,7 +700,7 @@ void CWeaponGrapple::ItemPostFrame( void )
 #ifndef CLIENT_DLL
 	if ( m_hHook )
 	{
-		if ( !(pOwner->m_nButtons & IN_USE) && !(pOwner->m_nButtons & IN_ATTACK) && !(pOwner->m_nButtons & IN_ATTACK2))
+		if ( !(pOwner->m_nButtons & IN_USE) )
 		{
 			m_hHook->SetTouch( NULL );
 			m_hHook->SetThink( NULL );
@@ -809,6 +763,158 @@ void CWeaponGrapple::FireHook( void )
 	m_flNextPrimaryAttack = m_flNextSecondaryAttack	= gpGlobals->curtime + 0.75;
 }
  
+//-----------------------------------------------------------------------------
+// Purpose: Swing Melee
+//-----------------------------------------------------------------------------
+void CWeaponGrapple::Swing( bool bSecondary )
+{
+	trace_t traceHit;
+	CBasePlayer *pOwner = ToBasePlayer( GetOwner() );
+
+	Vector swingStart = pOwner->Weapon_ShootPosition( );
+	Vector forward;
+
+	pOwner->EyeVectors( &forward, NULL, NULL );
+
+	Vector swingEnd = swingStart + forward * 6.5f;
+	UTIL_TraceLine( swingStart, swingEnd, MASK_SHOT_HULL, pOwner, COLLISION_GROUP_NONE, &traceHit );
+	Activity nHitActivity = ACT_VM_HITCENTER;
+
+	CTakeDamageInfo triggerInfo( GetOwner(), GetOwner(), /*Damge from melee */99, DMG_CLUB );
+	
+	if ( traceHit.fraction == 1.0 )
+	{
+		float meleeHullRadius = 1.732f * MELEE_HULL_DIM;  // hull is +/- 16, so use cuberoot of 2 to determine how big the hull is from center to the corner point
+
+		// Back off by hull "radius"
+		swingEnd -= forward * meleeHullRadius;
+
+		UTIL_TraceHull( swingStart, swingEnd, g_meleeMins, g_meleeMaxs, MASK_SHOT_HULL, pOwner, COLLISION_GROUP_NONE, &traceHit );
+		if ( traceHit.fraction < 1.0 && traceHit.m_pEnt )
+		{
+			Vector vecToTarget = traceHit.m_pEnt->GetAbsOrigin() - swingStart;
+			VectorNormalize( vecToTarget );
+
+			float dot = vecToTarget.Dot( forward );
+
+			// YWB:  Make sure they are sort of facing the guy at least...
+			if ( dot < 0.70721f )
+			{
+				// Force amiss
+				traceHit.fraction = 1.0f;
+			}
+			else
+			{
+				nHitActivity = ChooseIntersectionPointAndActivity( traceHit, g_meleeMins, g_meleeMaxs, pOwner );
+			}
+		}
+	}
+	WeaponSound( SINGLE );
+	// -------------------------
+	//	Miss
+	// -------------------------
+	if ( traceHit.fraction != 1.0f )
+	{
+		Hit( traceHit, nHitActivity );
+		WeaponSound( MELEE_HIT );
+	}
+
+	SendWeaponAnim( nHitActivity );
+	pOwner->SetAnimation( PLAYER_ATTACK1 );
+
+	//Setup our next attack times
+	m_flNextPrimaryAttack = gpGlobals->curtime + GetFireRate() + .5f;
+	m_flNextSecondaryAttack = gpGlobals->curtime + SequenceDuration() + .5f;
+} 
+
+Activity CWeaponGrapple::ChooseIntersectionPointAndActivity( trace_t &hitTrace, const Vector &mins, const Vector &maxs, CBasePlayer *pOwner )
+{
+	int			i, j, k;
+	float		distance;
+	const float	*minmaxs[2] = {mins.Base(), maxs.Base()};
+	trace_t		tmpTrace;
+	Vector		vecHullEnd = hitTrace.endpos;
+	Vector		vecEnd;
+
+	distance = 1e6f;
+	Vector vecSrc = hitTrace.startpos;
+
+	vecHullEnd = vecSrc + ((vecHullEnd - vecSrc)*2);
+	UTIL_TraceLine( vecSrc, vecHullEnd, MASK_SHOT_HULL, pOwner, COLLISION_GROUP_NONE, &tmpTrace );
+	if ( tmpTrace.fraction == 1.0 )
+	{
+		for ( i = 0; i < 2; i++ )
+		{
+			for ( j = 0; j < 2; j++ )
+			{
+				for ( k = 0; k < 2; k++ )
+				{
+					vecEnd.x = vecHullEnd.x + minmaxs[i][0];
+					vecEnd.y = vecHullEnd.y + minmaxs[j][1];
+					vecEnd.z = vecHullEnd.z + minmaxs[k][2];
+
+					UTIL_TraceLine( vecSrc, vecEnd, MASK_SHOT_HULL, pOwner, COLLISION_GROUP_NONE, &tmpTrace );
+					if ( tmpTrace.fraction < 1.0 )
+					{
+						float thisDistance = (tmpTrace.endpos - vecSrc).Length();
+						if ( thisDistance < distance )
+						{
+							hitTrace = tmpTrace;
+							distance = thisDistance;
+						}
+					}
+				}
+			}
+		}
+	}
+	else
+	{
+		hitTrace = tmpTrace;
+	}
+
+
+	return ACT_VM_HITCENTER;
+}
+
+void CWeaponGrapple::Hit( trace_t &traceHit, Activity nHitActivity )
+{
+	CBasePlayer *pPlayer = ToBasePlayer( GetOwner() );
+	//Do view kick
+//	AddViewKick();
+
+	CBaseEntity	*pHitEntity = traceHit.m_pEnt;
+
+	//Apply damage to a hit target
+	if ( pHitEntity != NULL )
+	{
+		Vector hitDirection;
+		pPlayer->EyeVectors( &hitDirection, NULL, NULL );
+		VectorNormalize( hitDirection );
+
+#ifndef CLIENT_DLL
+		CTakeDamageInfo info( GetOwner(), GetOwner(), /*Damge from melee */99, DMG_CLUB );
+
+		if( pPlayer && pHitEntity->IsNPC() )
+		{
+			// If bonking an NPC, adjust damage.
+			info.AdjustPlayerDamageInflictedForSkillLevel();
+		}
+
+		CalculateMeleeDamageForce( &info, hitDirection, traceHit.endpos );
+
+		pHitEntity->DispatchTraceAttack( info, hitDirection, &traceHit ); 
+		ApplyMultiDamage();
+
+		// Now hit all triggers along the ray that... 
+		TraceAttackToTriggers( info, traceHit.startpos, traceHit.endpos, hitDirection );
+#endif
+		WeaponSound( MELEE_HIT );
+	}
+
+	// Apply an impact effect
+	UTIL_ImpactTrace( &traceHit, DMG_CLUB );
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: 
 // Output : Returns true on success, false on failure.
