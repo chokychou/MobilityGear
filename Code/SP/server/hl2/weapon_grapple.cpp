@@ -784,8 +784,7 @@ void CWeaponGrapple::Swing( bool bSecondary )
 
 	CTakeDamageInfo triggerInfo( GetOwner(), GetOwner(), /*Damge from melee */99, DMG_CLUB );
 	
-	// if ( traceHit.fraction == 1.0 )
-	if ( false )
+	if ( traceHit.fraction == 1.0 )
 	{
 		float meleeHullRadius = 1.732f * MELEE_HULL_DIM;  // hull is +/- 16, so use cuberoot of 2 to determine how big the hull is from center to the corner point
 

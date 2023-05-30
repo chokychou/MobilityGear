@@ -15,7 +15,7 @@
 #pragma once
 #endif
 
-
+#include "basehlcombatweapon.h"                
 #include "weapon_hl2mpbasehlmpcombatweapon.h"
 //#include "basehlcombatweapon.h"                
 #include "sprite.h"                            
@@ -94,6 +94,7 @@ public:
     CWeaponGrapple( void );
  
     virtual void    Precache( void );
+	virtual void    UseEquipment( void );
     virtual void    PrimaryAttack( void );
     virtual void    SecondaryAttack( void );
     virtual bool    Deploy( void );
@@ -123,6 +124,10 @@ public:
 private:
 
     void    FireHook( void );
+    void 	Swing( bool bSecondary );
+	void	Hit( trace_t &traceHit, Activity nHitActivity );
+	Activity ChooseIntersectionPointAndActivity( trace_t &hitTrace, const Vector &mins, const Vector &maxs, CBasePlayer *pOwner );
+
  
 #ifndef CLIENT_DLL
  
